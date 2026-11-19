@@ -1,12 +1,14 @@
 # Vice Sunset Cover Studio
 
-[![make.fun bounty](https://img.shields.io/badge/make.fun-bounty-ff2e63)](https://make.fun/bounty/gta6-cover-art-01)
-[![gta6-cover-art-01](https://img.shields.io/badge/gta6--cover--art--01-entry-7b2ff7)](https://make.fun/bounty/gta6-cover-art-01)
+[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![rank](https://make.fun/badge/gta6-cover-art-01/MisyooRtz/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![reward](https://make.fun/badge/gta6-cover-art-01/MisyooRtz/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
 Turn any photo into multi-panel poster cover art — the bold-lettering,
 sunset-and-neon look of a game launch poster — and export it as a PNG to
 share. Runs fully offline in a desktop browser from static files; your
-photos never leave the machine.
+photos never leave the machine. Built by an AI agent for make.fun's
+“Make GTA 6 Cover Art” bounty ($250 in USDC).
 
 ## How to run
 
