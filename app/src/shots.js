@@ -1,89 +1,96 @@
-// Fixed scenes for screenshots: ?shot=cover shows the cover alone,
-// ?shot=editor shows the page with a sample photo loaded, and
-// ?shot=export-test proves the full-resolution export path works.
-// Query params: photo / photo1..photo4 (sample names), caption, subtitle,
-// badge, layout, grade, size (WxH). window.__shotReady is set once the
-// scene has painted, so a screenshot runner knows when to capture.
-// A scene error is reported on window.__shotError instead of leaving the
-// runner waiting on a flag that never comes.
-
-import { exportCover } from './cover.js';
-
-window.addEventListener('error', (event) => {
-  window.__shotError = String(event.message ?? event.error ?? 'unknown error');
-});
+// Fixed scenes for screenshots and checks.
+//
+// `?shot=cover` shows the cover alone, full-bleed, for the cover shots.
+// `?shot=editor` shows the whole editor with a photo loaded. `?shot=export-test`
+// draws the cover and runs the same export the Export button calls, then
+// publishes its byte size on window.__exportInfo so a check can read it.
+// Every scene sets window.__shotReady once the cover is painted.
+//
+// Query knobs: photo (boulevard | pier), caption (the title), subtitle,
+// badge, layout (quad | hero | bleed | collage), grade
+// (sunset | neon | dusk | noir), size (square | portrait | wide).
 
 function ready() {
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    window.__shotReady = true;
-  }));
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.__shotReady = true;
+      resolve();
+    }));
+  });
 }
 
-function parseSize(query) {
-  const raw = query.get('size') ?? '';
-  const match = raw.match(/^(\d+)x(\d+)$/);
-  if (match) return { w: Number(match[1]), h: Number(match[2]) };
-  return { w: 1080, h: 1080 };
+function readScene(query) {
+  return {
+    photo: query.get('photo') ?? 'pier',
+    title: query.get('caption') ?? 'Sunset Heist',
+    subtitle: query.get('subtitle') ?? 'one last ride down Ocean Drive',
+    badge: query.get('badge') ?? 'Vice City',
+    layout: query.get('layout') ?? 'hero',
+    grade: query.get('grade') ?? 'sunset',
+    size: query.get('size') ?? 'square',
+  };
 }
 
-async function applyScene(query, api) {
-  const layout = query.get('layout');
-  if (layout) api.setLayout(layout);
-  const grade = query.get('grade');
-  if (grade) api.setGrade(grade);
-  const caption = query.get('caption');
-  if (caption !== null) api.state.title = caption;
-  const subtitle = query.get('subtitle');
-  if (subtitle !== null) api.state.subtitle = subtitle;
-  const badge = query.get('badge');
-  if (badge !== null) api.state.badge = badge;
-  const first = query.get('photo');
-  if (query.get('photo1')) {
-    for (let i = 1; i <= 4; i += 1) {
-      const name = query.get(`photo${i}`);
-      if (name) await api.setPhoto(i - 1, `samples/${name}.jpg`);
-    }
-  } else if (first) {
-    await api.useOnePhotoEverywhere(`samples/${first}.jpg`);
+async function fillAllPanels(scene, hooks) {
+  // One photo in every panel, each panel keeping its own look-up crop.
+  for (let i = 0; i < 4; i += 1) {
+    await hooks.loadIntoPanel(i, `samples/${scene.photo}.jpg`, scene.photo);
   }
 }
 
-export async function runShot(shot, query, api) {
-  if (shot === 'cover') {
-    document.body.classList.add('shot-cover');
-    const { w, h } = parseSize(query);
-    api.canvas.width = w;
-    api.canvas.height = h;
-    await applyScene(query, api);
-    if (!query.get('photo') && !query.get('photo1')) {
-      // A bare ?shot=cover still shows a real cover, not empty panels.
-      await api.useOnePhotoEverywhere('samples/pier.jpg');
-    }
-    api.redraw();
-    ready();
-    return;
+export async function runShot(shot, query, hooks) {
+  const scene = readScene(query);
+  hooks.setState({
+    layout: scene.layout,
+    grade: scene.grade,
+    size: scene.size,
+    title: scene.title,
+    subtitle: scene.subtitle,
+    badge: scene.badge,
+  });
+  // Keep the editor's text inputs showing the same words as the cover.
+  const titleInput = document.getElementById('title');
+  const subtitleInput = document.getElementById('subtitle');
+  const badgeInput = document.getElementById('badge');
+  if (titleInput) titleInput.value = scene.title;
+  if (subtitleInput) subtitleInput.value = scene.subtitle;
+  if (badgeInput) badgeInput.value = scene.badge;
+  if (shot === 'cover') document.body.classList.add('shot-cover');
+  if (shot === 'cover' || shot === 'export-test') {
+    await fillAllPanels(scene, hooks);
+    hooks.redraw();
+    if (shot === 'export-test') return runExportTest(hooks);
+    return ready();
   }
   if (shot === 'editor') {
-    await applyScene(query, api);
-    api.redraw();
-    ready();
-    return;
+    await hooks.loadSample(scene.photo, 0);
+    hooks.redraw();
+    return ready();
   }
-  if (shot === 'export-test') {
-    await applyScene(query, api);
-    api.redraw();
-    // Run the exact export the Export buttons call, at full resolution,
-    // and report the resulting file size on the window so a headless
-    // check can confirm the path produced real bytes.
-    const out = exportCover(api.state, 1080, 1080);
-    const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
-    window.__exportBytes = blob ? blob.size : 0;
-    window.__exportSize = '1080x1080';
-    ready();
-    return;
+  return ready();
+}
+
+// The export check: runs the exact exportCover the Export button calls,
+// at the square size, and reports the PNG back on the window so an
+// automated check can verify the export path end to end.
+async function runExportTest(hooks) {
+  try {
+    const blob = await hooks.exportCover('square');
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('could not read the exported PNG'));
+      reader.readAsDataURL(blob);
+    });
+    window.__exportInfo = {
+      bytes: blob.size,
+      width: 1080,
+      height: 1080,
+      mime: blob.type,
+      dataUrl,
+    };
+  } catch (error) {
+    window.__exportInfo = { error: String(error?.message ?? error) };
   }
-  // Unknown shot name: fall back to the plain editor with a sample photo.
-  await api.setPhoto(0, 'samples/pier.jpg');
-  api.redraw();
-  ready();
+  return ready();
 }

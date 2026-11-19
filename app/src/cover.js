@@ -1,398 +1,425 @@
-// Vice Sunset Cover Studio — cover rendering engine.
+// Vice Sunset Cover Studio — the cover engine.
 //
-// One draw path serves the live preview and the full-resolution export:
-// given a canvas, the panel photos with their crops, a layout, a grade and
-// the title words, it paints the panels, the grade, grain, vignette and
-// type. Nothing here touches the network or the page; the editor in
-// main.js owns all input, and shots.js owns the screenshot scenes.
+// Draws a multi-panel GTA-style cover onto a canvas: panel photos with a
+// per-panel "look-up" crop, one of four colour grades, grain and vignette,
+// then a badge ribbon, a big condensed title and a script subtitle across
+// the foot of the cover. Pure canvas 2D, no network, no library.
 //
-// A panel crop is { zoom, ox, oy, fit }: zoom multiplies the base scale,
-// (ox, oy) is how far up the photo the crop looks — 0 shows the bottom
-// of the photo, 1 the top — so a larger oy frames higher up: the side
-// panels use 0.72/0.75 to keep a full face in frame while the hero sits
-// slightly high at 0.45. fit is 'fill' (cover the panel, crop the
-// overflow) or 'fit' (whole photo, letterbox).
+// The crop model: every panel shows one photo through a window. The window
+// is described by a centre point (cx, cy) in photo fractions and a zoom.
+// `oy` is the look-up of the default window: how far up the photo the crop
+// looks. A portrait photo keeps its face near the top, so a short wide
+// panel must look high up the photo to catch the face at all — its default
+// cy is (1 - oy). The window is clamped so the photo always covers the
+// whole panel; a panel can never go empty, whatever the user drags.
+
+export const COVER_SIZES = {
+  square: { w: 1080, h: 1080, label: '1080 × 1080' },
+  portrait: { w: 1080, h: 1350, label: '1080 × 1350' },
+  wide: { w: 1920, h: 1080, label: '1920 × 1080' },
+};
+
+export const LAYOUTS = {
+  quad: { name: 'Quad Grid', hint: 'Four equal panels' },
+  hero: { name: 'Hero + Side Strip', hint: 'One hero, three sides' },
+  bleed: { name: 'Full Bleed', hint: 'One photo, three snapshots' },
+  collage: { name: 'Snapshot Collage', hint: 'Four tilted snapshots' },
+};
 
 export const GRADES = {
   sunset: {
-    label: 'Vice Sunset',
-    filter: 'saturate(1.35) contrast(1.08) brightness(1.04)',
-    top: 'rgba(255, 190, 90, 0.10)',
-    bottom: 'rgba(214, 48, 120, 0.38)',
-    blend: 'overlay',
-    grain: 0.05,
+    name: 'Vice Sunset',
+    filter: 'saturate(1.38) contrast(1.12) brightness(1.04) sepia(0.16)',
+    overlay: ['rgba(255, 94, 98, 0.20)', 'rgba(255, 150, 60, 0.22)', 'rgba(120, 30, 140, 0.16)'],
+    blend: 'soft-light',
+    grain: 0.10,
+    vignette: 0.34,
+    titleFrom: '#ffe9a8',
+    titleTo: '#ff7a3d',
+    titleStroke: '#2a0a2e',
+    accent: '#ff5e62',
+    scrim: 'rgba(20, 4, 28, 0.88)',
   },
   neon: {
-    label: 'Neon Night',
-    filter: 'saturate(1.55) contrast(1.12) brightness(0.98) hue-rotate(-8deg)',
-    top: 'rgba(64, 224, 255, 0.12)',
-    bottom: 'rgba(255, 0, 128, 0.42)',
-    blend: 'overlay',
-    grain: 0.07,
+    name: 'Neon Night',
+    filter: 'saturate(1.55) contrast(1.22) brightness(0.96) hue-rotate(-14deg)',
+    overlay: ['rgba(0, 240, 255, 0.16)', 'rgba(190, 60, 255, 0.20)', 'rgba(255, 0, 128, 0.10)'],
+    blend: 'screen',
+    grain: 0.12,
+    vignette: 0.42,
+    titleFrom: '#aef7ff',
+    titleTo: '#ff5ad2',
+    titleStroke: '#0a0618',
+    accent: '#00e5ff',
+    scrim: 'rgba(4, 6, 26, 0.88)',
   },
   dusk: {
-    label: 'Palm Dusk',
-    filter: 'saturate(1.12) contrast(1.05) brightness(0.94)',
-    top: 'rgba(120, 90, 220, 0.14)',
-    bottom: 'rgba(20, 60, 90, 0.40)',
+    name: 'Palm Dusk',
+    filter: 'saturate(1.22) contrast(1.06) brightness(1.01) sepia(0.30)',
+    overlay: ['rgba(255, 190, 90, 0.20)', 'rgba(200, 90, 40, 0.14)', 'rgba(60, 20, 60, 0.14)'],
     blend: 'soft-light',
-    grain: 0.05,
+    grain: 0.09,
+    vignette: 0.30,
+    titleFrom: '#fff3c4',
+    titleTo: '#e8a04c',
+    titleStroke: '#241207',
+    accent: '#ffb347',
+    scrim: 'rgba(26, 10, 4, 0.88)',
   },
   noir: {
-    label: 'Noir',
-    filter: 'grayscale(1) contrast(1.18) brightness(0.96)',
-    top: 'rgba(220, 220, 220, 0.08)',
-    bottom: 'rgba(0, 0, 0, 0.34)',
+    name: 'Noir',
+    filter: 'grayscale(1) contrast(1.28) brightness(1.06)',
+    overlay: ['rgba(255, 255, 255, 0.08)', 'rgba(0, 0, 0, 0.12)', 'rgba(255, 255, 255, 0.05)'],
     blend: 'overlay',
-    grain: 0.09,
+    grain: 0.17,
+    vignette: 0.46,
+    titleFrom: '#ffffff',
+    titleTo: '#c9c9c9',
+    titleStroke: '#000000',
+    accent: '#f5f5f5',
+    scrim: 'rgba(0, 0, 0, 0.88)',
   },
 };
 
-// Panel counts: quad 4, hero 3, bleed 1, collage 3. Rects are fractions of
-// the canvas (x, y, w, h) so one layout works at any export size.
-export const LAYOUTS = {
-  quad: {
-    label: 'Quad Grid',
-    panels: 4,
-    tilt: [0, 0, 0, 0],
-    rects: [
-      [0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5],
-      [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5],
-    ],
-    titleZone: [0, 0.74, 1, 0.26],
-  },
-  hero: {
-    label: 'Hero + Side Strip',
-    panels: 3,
-    tilt: [0, 0, 0],
-    rects: [
-      [0, 0, 0.62, 1],
-      [0.62, 0, 0.38, 0.5],
-      [0.62, 0.5, 0.38, 0.5],
-    ],
-    titleZone: [0, 0.74, 1, 0.26],
-  },
-  bleed: {
-    label: 'Full Bleed',
-    panels: 1,
-    tilt: [0],
-    rects: [[0, 0, 1, 1]],
-    titleZone: [0, 0.68, 1, 0.32],
-  },
-  collage: {
-    label: 'Snapshot Collage',
-    panels: 3,
-    tilt: [-0.06, 0.05, -0.03],
-    rects: [
-      [0.06, 0.05, 0.42, 0.56],
-      [0.52, 0.10, 0.42, 0.56],
-      [0.28, 0.48, 0.46, 0.48],
-    ],
-    titleZone: [0, 0.82, 1, 0.18],
-  },
-};
-
-// Framing that keeps faces in shot for the bundled samples: the hero crop
-// sits slightly high, the side strips look further up the photo so a full
-// face shows, and the bottom wide panel keeps hat, eyes and nose above
-// the title band instead of cropping to chin and mouth.
-export function defaultCrops(layout) {
-  const byLayout = {
-    quad: [
-      { zoom: 1, ox: 0.5, oy: 0.45, fit: 'fill' },
-      { zoom: 1, ox: 0.5, oy: 0.72, fit: 'fill' },
-      { zoom: 1, ox: 0.5, oy: 0.75, fit: 'fill' },
-      { zoom: 1, ox: 0.5, oy: 0.6, fit: 'fill' },
-    ],
-    hero: [
-      { zoom: 1, ox: 0.5, oy: 0.45, fit: 'fill' },
-      { zoom: 1, ox: 0.5, oy: 0.72, fit: 'fill' },
-      { zoom: 1, ox: 0.5, oy: 0.75, fit: 'fill' },
-    ],
-    bleed: [{ zoom: 1, ox: 0.5, oy: 0.45, fit: 'fill' }],
-    collage: [
-      { zoom: 1, ox: 0.5, oy: 0.45, fit: 'fill' },
-      { zoom: 1, ox: 0.5, oy: 0.72, fit: 'fill' },
-      { zoom: 1, ox: 0.5, oy: 0.6, fit: 'fill' },
-    ],
-  };
-  return (byLayout[layout] ?? byLayout.quad).map((c) => ({ ...c }));
+/** The title band: the foot of the cover where ribbon, title and subtitle live. */
+export function titleBand(h) {
+  return { y: h * 0.78, h: h * 0.22 };
 }
 
-export function panelCount(layout) {
-  return (LAYOUTS[layout] ?? LAYOUTS.quad).panels;
+/**
+ * Panel geometry for a layout in a cover of w x h. Each panel carries its
+ * default look-up `oy`, its slot role (hero / side / bottom / snap) and an
+ * optional tilt in degrees. Slots are listed in draw order.
+ */
+export function layoutPanels(layout, w, h) {
+  const gap = Math.round(Math.min(w, h) * 0.011);
+  const margin = Math.round(Math.min(w, h) * 0.013);
+  const band = titleBand(h);
+  if (layout === 'quad') {
+    const cw = (w - margin * 2 - gap) / 2;
+    const ch = (h - margin * 2 - gap) / 2;
+    return [
+      { id: 'p0', role: 'hero', x: margin, y: margin, w: cw, h: ch, rot: 0, oy: 0.45 },
+      { id: 'p1', role: 'side', x: margin + cw + gap, y: margin, w: cw, h: ch, rot: 0, oy: 0.72 },
+      { id: 'p2', role: 'side', x: margin, y: margin + ch + gap, w: cw, h: ch, rot: 0, oy: 0.75 },
+      { id: 'p3', role: 'bottom', x: margin + cw + gap, y: margin + ch + gap, w: cw, h: ch, rot: 0, oy: 0.6 },
+    ];
+  }
+  if (layout === 'hero') {
+    const heroW = (w - margin * 2 - gap) * 0.62;
+    const sideX = margin + heroW + gap;
+    const sideW = w - sideX - margin;
+    const sideH = (h - margin * 2 - gap * 2) / 3;
+    return [
+      { id: 'p0', role: 'hero', x: margin, y: margin, w: heroW, h: h - margin * 2, rot: 0, oy: 0.45 },
+      { id: 'p1', role: 'side', x: sideX, y: margin, w: sideW, h: sideH, rot: 0, oy: 0.72 },
+      { id: 'p2', role: 'side', x: sideX, y: margin + sideH + gap, w: sideW, h: sideH, rot: 0, oy: 0.75 },
+      { id: 'p3', role: 'bottom', x: sideX, y: margin + (sideH + gap) * 2, w: sideW, h: sideH, rot: 0, oy: 0.6 },
+    ];
+  }
+  if (layout === 'bleed') {
+    const snapW = w * 0.27;
+    const snapH = h * 0.185;
+    const snapY = band.y - snapH - Math.round(h * 0.02);
+    return [
+      { id: 'p0', role: 'hero', x: 0, y: 0, w, h, rot: 0, oy: 0.45 },
+      { id: 'p1', role: 'snap', x: w * 0.045, y: snapY, w: snapW, h: snapH, rot: -3.5, oy: 0.72 },
+      { id: 'p2', role: 'snap', x: w * 0.365, y: snapY - h * 0.012, w: snapW, h: snapH, rot: 2.5, oy: 0.75 },
+      { id: 'p3', role: 'snap', x: w * 0.685, y: snapY, w: snapW, h: snapH, rot: -2, oy: 0.6 },
+    ];
+  }
+  // collage: four tilted polaroids on a coloured field.
+  const cw = w * 0.44;
+  const ch = h * 0.335;
+  return [
+    { id: 'p0', role: 'snap', x: w * 0.045, y: h * 0.03, w: cw, h: ch, rot: -4, oy: 0.45 },
+    { id: 'p1', role: 'snap', x: w * 0.515, y: h * 0.055, w: cw, h: ch, rot: 3, oy: 0.72 },
+    { id: 'p2', role: 'snap', x: w * 0.06, y: h * 0.40, w: cw, h: ch, rot: 2.5, oy: 0.75 },
+    { id: 'p3', role: 'snap', x: w * 0.50, y: h * 0.425, w: cw, h: ch, rot: -3, oy: 0.6 },
+  ];
 }
 
-// Absolute pixel rects for a layout on a canvas of w x h, with a gutter
-// between panels (gutter scales with the canvas so exports match preview).
-export function panelRects(layout, w, h) {
-  const def = LAYOUTS[layout] ?? LAYOUTS.quad;
-  const g = Math.max(2, Math.round(Math.min(w, h) * 0.008));
-  return def.rects.map(([fx, fy, fw, fh]) => ({
-    x: Math.round(fx * w) + (fx > 0 ? g / 2 : 0),
-    y: Math.round(fy * h) + (fy > 0 ? g / 2 : 0),
-    w: Math.round(fw * w) - (fx > 0 ? g / 2 : 0) - (fx + fw < 1 ? g / 2 : 0),
-    h: Math.round(fh * h) - (fy > 0 ? g / 2 : 0) - (fy + fh < 1 ? g / 2 : 0),
-  }));
+// ---------------------------------------------------------------------------
+// Crop math
+// ---------------------------------------------------------------------------
+
+/** Default crop centre for a panel slot: centred horizontally, looked up by oy. */
+export function defaultCrop(panel) {
+  return { cx: 0.5, cy: 1 - panel.oy, zoom: 1, mode: 'fill' };
 }
 
-// A small deterministic noise tile, built once and stamped as a pattern so
-// the grain is identical on every export of the same size.
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+/**
+ * Where a photo lands inside a panel. Returns the drawImage destination rect
+ * (dx, dy, dw, dh). The photo point (cx, cy) sits at the panel centre; the
+ * rect is clamped so the photo always covers the panel — when the photo is
+ * smaller than the panel on an axis it is centred on that axis instead.
+ */
+export function cropRect(panel, img, crop) {
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const base = crop.mode === 'fit'
+    ? Math.min(panel.w / iw, panel.h / ih)
+    : Math.max(panel.w / iw, panel.h / ih);
+  const scale = base * Math.max(1, crop.zoom);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  let dx = panel.x + panel.w / 2 - crop.cx * dw;
+  let dy = panel.y + panel.h / 2 - crop.cy * dh;
+  dx = dw <= panel.w ? panel.x + (panel.w - dw) / 2 : clamp(dx, panel.x + panel.w - dw, panel.x);
+  dy = dh <= panel.h ? panel.y + (panel.h - dh) / 2 : clamp(dy, panel.y + panel.h - dh, panel.y);
+  return { dx, dy, dw, dh };
+}
+
+/** The crop centre that a drag ending at (dx, dy) implies, clamped to the photo. */
+export function cropFromRect(panel, img, rect) {
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const cx = clamp((panel.x + panel.w / 2 - rect.dx) / rect.dw, 0, 1);
+  const cy = clamp((panel.y + panel.h / 2 - rect.dy) / rect.dh, 0, 1);
+  return { cx, cy };
+}
+
+// ---------------------------------------------------------------------------
+// Grain (deterministic: one seeded noise tile, reused for every cover)
+// ---------------------------------------------------------------------------
+
 let noiseTile = null;
-function grainPattern(ctx) {
+function grainTile() {
   if (noiseTile) return noiseTile;
+  const size = 128;
   const tile = document.createElement('canvas');
-  tile.width = 128;
-  tile.height = 128;
+  tile.width = size;
+  tile.height = size;
   const tctx = tile.getContext('2d');
-  const data = tctx.createImageData(128, 128);
-  let seed = 1234567;
+  const data = tctx.createImageData(size, size);
+  let seed = 20261119;
+  const next = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
   for (let i = 0; i < data.data.length; i += 4) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    const v = seed % 256;
+    const v = Math.floor(next() * 255);
     data.data[i] = v;
     data.data[i + 1] = v;
     data.data[i + 2] = v;
     data.data[i + 3] = 255;
   }
   tctx.putImageData(data, 0, 0);
-  noiseTile = ctx.createPattern(tile, 'repeat');
-  return noiseTile;
+  noiseTile = tile;
+  return tile;
 }
 
-// Paints one photo into one panel rect honouring its crop. Fill scales to
-// cover and clamps the pan so no gap opens at the edges; fit scales to
-// show the whole photo and centres it on the panel background.
-export function drawPanel(ctx, photo, rect, crop, grade) {
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+
+function drawPhotoPanel(ctx, panel, img, crop, grade, compare) {
+  const rect = cropRect(panel, img, crop);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.rect(panel.x, panel.y, panel.w, panel.h);
   ctx.clip();
-  ctx.fillStyle = '#241530';
-  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-  if (!photo) {
-    // Empty panel: a faint hint so the editor shows which panels still
-    // need a photo instead of a flat dark rectangle.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(rect.x, rect.y);
-    ctx.lineTo(rect.x + rect.w, rect.y + rect.h);
-    ctx.moveTo(rect.x + rect.w, rect.y);
-    ctx.lineTo(rect.x, rect.y + rect.h);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.font = `600 ${Math.max(11, Math.round(Math.min(rect.w, rect.h) * 0.06))}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('NO PHOTO YET', rect.x + rect.w / 2, rect.y + rect.h / 2);
+  if (crop.mode === 'fit') {
+    ctx.fillStyle = '#160a1c';
+    ctx.fillRect(panel.x, panel.y, panel.w, panel.h);
   }
-  if (photo) {
-    const iw = photo.naturalWidth;
-    const ih = photo.naturalHeight;
-    const base = crop.fit === 'fit'
-      ? Math.min(rect.w / iw, rect.h / ih)
-      : Math.max(rect.w / iw, rect.h / ih);
-    const s = base * (crop.zoom || 1);
-    const dw = iw * s;
-    const dh = ih * s;
-    // Look-up crop: oy 1 shows the top of the photo, oy 0 the bottom.
-    // A larger oy therefore frames higher up — that is why the side
-    // panels use 0.72/0.75 to keep a full face in frame while the hero
-    // sits slightly high at 0.45.
-    let dx = rect.x + (rect.w - dw) / 2;
-    let dy = rect.y + (rect.h - dh) / 2;
-    if (crop.fit !== 'fit') {
-      dx = dw > rect.w ? rect.x - (dw - rect.w) * (1 - (crop.ox ?? 0.5)) : rect.x + (rect.w - dw) / 2;
-      dy = dh > rect.h ? rect.y - (dh - rect.h) * (1 - (crop.oy ?? 0.5)) : rect.y + (rect.h - dh) / 2;
-    }
-    ctx.filter = grade?.filter ?? 'none';
-    ctx.drawImage(photo, dx, dy, dw, dh);
-    ctx.filter = 'none';
+  if (!compare) ctx.filter = grade.filter;
+  ctx.drawImage(img, rect.dx, rect.dy, rect.dw, rect.dh);
+  ctx.filter = 'none';
+  if (!compare) {
+    const overlay = ctx.createLinearGradient(panel.x, panel.y, panel.x + panel.w, panel.y + panel.h);
+    overlay.addColorStop(0, grade.overlay[0]);
+    overlay.addColorStop(0.55, grade.overlay[1]);
+    overlay.addColorStop(1, grade.overlay[2]);
+    ctx.globalCompositeOperation = grade.blend;
+    ctx.fillStyle = overlay;
+    ctx.fillRect(panel.x, panel.y, panel.w, panel.h);
+    ctx.globalCompositeOperation = 'source-over';
   }
   ctx.restore();
 }
 
-function fitFont(ctx, text, family, weight, maxWidth, startSize) {
+/**
+ * Polaroid-style frame for tilted snapshot panels, drawn in the caller's
+ * current transform at the panel's own (possibly already rotated) coords:
+ * a white border with a soft drop shadow around the photo.
+ */
+function drawSnapFrame(ctx, panel, w, h) {
+  const pad = Math.round(Math.min(panel.w, panel.h) * 0.045);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+  ctx.shadowBlur = Math.round(Math.min(w, h) * 0.02);
+  ctx.shadowOffsetY = Math.round(Math.min(w, h) * 0.008);
+  ctx.fillStyle = '#fdf8ef';
+  ctx.fillRect(panel.x - pad, panel.y - pad, panel.w + pad * 2, panel.h + pad * 2);
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = Math.max(2, Math.round(Math.min(w, h) * 0.004));
+  ctx.strokeRect(panel.x, panel.y, panel.w, panel.h);
+  ctx.restore();
+}
+
+function drawPanel(ctx, panel, img, crop, grade, compare, w, h) {
+  ctx.save();
+  if (panel.rot) {
+    ctx.translate(panel.x + panel.w / 2, panel.y + panel.h / 2);
+    ctx.rotate((panel.rot * Math.PI) / 180);
+    ctx.translate(-panel.w / 2, -panel.h / 2);
+    panel = { ...panel, x: 0, y: 0 };
+  }
+  if (panel.role === 'snap') drawSnapFrame(ctx, panel, w, h);
+  if (img) {
+    drawPhotoPanel(ctx, panel, img, crop, grade, compare);
+  } else {
+    ctx.fillStyle = '#3a1c44';
+    ctx.fillRect(panel.x, panel.y, panel.w, panel.h);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.font = `600 ${Math.round(Math.min(panel.w, panel.h) * 0.09)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Drop a photo here', panel.x + panel.w / 2, panel.y + panel.h / 2);
+    ctx.textBaseline = 'alphabetic';
+  }
+  ctx.restore();
+}
+
+function drawGrainAndVignette(ctx, w, h, grade) {
+  const tile = grainTile();
+  const pattern = ctx.createPattern(tile, 'repeat');
+  ctx.save();
+  ctx.globalAlpha = grade.grain;
+  ctx.fillStyle = pattern;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+  const vig = ctx.createRadialGradient(
+    w / 2, h * 0.45, Math.min(w, h) * 0.42,
+    w / 2, h / 2, Math.max(w, h) * 0.78,
+  );
+  vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vig.addColorStop(1, `rgba(0, 0, 0, ${grade.vignette})`);
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
+}
+
+function fitFont(ctx, text, fontFamily, weight, startSize, maxWidth) {
   let size = startSize;
-  ctx.font = `${weight} ${size}px ${family}`;
-  while (size > 12 && ctx.measureText(text).width > maxWidth) {
+  ctx.font = `${weight} ${size}px ${fontFamily}`;
+  while (ctx.measureText(text).width > maxWidth && size > 10) {
     size -= 2;
-    ctx.font = `${weight} ${size}px ${family}`;
+    ctx.font = `${weight} ${size}px ${fontFamily}`;
   }
   return size;
 }
 
-// The title block: gradient-filled condensed capitals with a dark outline
-// and a drop shadow, the script subtitle under it, and a small badge
-// ribbon. Drawn inside the layout's title zone over a darkening band so
-// the words stay readable over any photo.
-function drawTitle(ctx, w, h, zone, title, subtitle, badge) {
-  const [zx, zy, zw, zh] = zone;
-  const bx = zx * w;
-  const by = zy * h;
-  const bw = zw * w;
-  const bh = zh * h;
-  const band = ctx.createLinearGradient(0, by - bh * 0.4, 0, by + bh);
-  band.addColorStop(0, 'rgba(10, 4, 20, 0)');
-  band.addColorStop(0.45, 'rgba(10, 4, 20, 0.55)');
-  band.addColorStop(1, 'rgba(10, 4, 20, 0.88)');
-  ctx.fillStyle = band;
-  ctx.fillRect(bx, by - bh * 0.4, bw, bh * 1.4);
+function drawTitleBlock(ctx, w, h, grade, title, subtitle, badge) {
+  const band = titleBand(h);
+  // Scrim so the letters read over any photo.
+  const scrim = ctx.createLinearGradient(0, band.y - h * 0.06, 0, h);
+  scrim.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  scrim.addColorStop(0.45, grade.scrim.replace(/[\d.]+\)$/, '0.55)'));
+  scrim.addColorStop(1, grade.scrim);
+  ctx.fillStyle = scrim;
+  ctx.fillRect(0, band.y - h * 0.06, w, h - band.y + h * 0.06);
 
-  const words = (title || '').trim().toUpperCase();
-  if (words) {
-    const size = fitFont(ctx, words, 'Anton, "Arial Narrow", sans-serif', 400, bw * 0.92, bh * 0.52);
-    const grad = ctx.createLinearGradient(0, by + bh * 0.08, 0, by + bh * 0.62);
-    grad.addColorStop(0, '#fff7d6');
-    grad.addColorStop(0.55, '#ffd76a');
-    grad.addColorStop(1, '#ff5e8a');
+  const cx = w / 2;
+  // Title baseline first: the badge ribbon is then placed ABOVE it, its
+  // bottom clear of the title's cap height, so the two can never collide.
+  const text = (title || '').trim().toUpperCase() || 'VICE SUNSET';
+  const titleSize = fitFont(ctx, text, 'Anton, "Arial Narrow", sans-serif', 400, Math.round(h * 0.105), w * 0.92);
+  const titleY = band.y + band.h * 0.62;
+  const badgeText = (badge || '').trim().toUpperCase();
+  if (badgeText) {
+    const badgeSize = Math.round(h * 0.026);
+    ctx.font = `700 ${badgeSize}px system-ui, sans-serif`;
+    const tw = ctx.measureText(`★ ${badgeText} ★`).width;
+    const bw = tw + badgeSize * 1.6;
+    const bh = badgeSize * 1.9;
+    const bx = cx - bw / 2;
+    const by = titleY - titleSize * 0.85 - 6 - bh;
+    ctx.save();
+    ctx.fillStyle = grade.accent;
+    ctx.beginPath();
+    ctx.moveTo(bx + bh / 2, by);
+    ctx.lineTo(bx + bw - bh / 2, by);
+    ctx.lineTo(bx + bw, by + bh / 2);
+    ctx.lineTo(bx + bw - bh / 2, by + bh);
+    ctx.lineTo(bx + bh / 2, by + bh);
+    ctx.lineTo(bx, by + bh / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = grade.titleStroke;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#160a24';
-    ctx.lineWidth = Math.max(2, size * 0.07);
-    ctx.shadowColor = 'rgba(255, 60, 140, 0.55)';
-    ctx.shadowBlur = size * 0.16;
-    ctx.shadowOffsetY = size * 0.04;
-    const ty = by + bh * 0.34;
-    ctx.strokeText(words, bx + bw / 2, ty);
-    ctx.fillStyle = grad;
-    ctx.fillText(words, bx + bw / 2, ty);
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
+    ctx.fillText(`★ ${badgeText} ★`, cx, by + bh / 2 + 1);
+    ctx.restore();
   }
+
+  const grad = ctx.createLinearGradient(0, titleY - titleSize, 0, titleY + titleSize * 0.2);
+  grad.addColorStop(0, grade.titleFrom);
+  grad.addColorStop(1, grade.titleTo);
+  ctx.save();
+  ctx.font = `400 ${titleSize}px Anton, "Arial Narrow", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+  ctx.shadowBlur = Math.round(titleSize * 0.16);
+  ctx.shadowOffsetY = Math.round(titleSize * 0.05);
+  ctx.strokeStyle = grade.titleStroke;
+  ctx.lineWidth = Math.max(2, Math.round(titleSize * 0.055));
+  ctx.strokeText(text, cx, titleY);
+  ctx.fillStyle = grad;
+  ctx.fillText(text, cx, titleY);
+  ctx.restore();
 
   const sub = (subtitle || '').trim();
   if (sub) {
-    const size = fitFont(ctx, sub, 'Pacifico, cursive', 400, bw * 0.7, bh * 0.24);
-    ctx.font = `${size}px Pacifico, cursive`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffe9f3';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-    ctx.shadowBlur = size * 0.2;
-    ctx.fillText(sub, bx + bw / 2, by + bh * 0.72);
-    ctx.shadowBlur = 0;
-  }
-
-  const tag = (badge || '').trim().toUpperCase();
-  if (tag) {
-    const size = Math.max(11, Math.round(bh * 0.13));
-    ctx.font = `700 ${size}px system-ui, sans-serif`;
-    const tw = ctx.measureText(tag).width + size * 1.6;
-    // The badge floats just above the title, on the photo, so it never
-    // covers the first letter of a wide title.
-    const rx = bx + bw * 0.04;
-    const ry = by - bh * 0.22;
+    const subSize = fitFont(ctx, sub, 'Pacifico, cursive', 400, Math.round(h * 0.042), w * 0.8);
     ctx.save();
-    ctx.translate(rx + tw / 2, ry + size * 0.8);
-    ctx.rotate(-0.05);
-    ctx.fillStyle = '#ff2e88';
-    ctx.beginPath();
-    ctx.roundRect(-tw / 2, -size * 0.8, tw, size * 1.6, size * 0.8);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(tag, 0, 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = Math.round(subSize * 0.3);
+    ctx.fillText(sub, cx, titleY + subSize * 1.7);
     ctx.restore();
   }
 }
 
-// The single shared draw: panels, grade wash, grain, vignette, title.
-// opts.compare skips the grade, grain and vignette so the editor's
-// hold-to-compare button shows the raw photos underneath.
-export function drawCover(canvas, state, opts = {}) {
+/**
+ * Draws the whole cover. `state` is { layout, grade, title, subtitle, badge,
+ * panels: [{ photo, crop }] } where photo is an image or null and crop is
+ * { cx, cy, zoom, mode }. `compare` draws the photos without the grade.
+ */
+export function drawCover(canvas, state, compare = false) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
-  const layout = LAYOUTS[state.layout] ?? LAYOUTS.quad;
   const grade = GRADES[state.grade] ?? GRADES.sunset;
-  const compare = !!opts.compare;
-  // Defensive clamp: a malformed crop (from a hand-edited state or a bad
-  // query param) must never paint a photo outside its panel.
-  for (const crop of state.crops ?? []) {
-    crop.zoom = Math.min(4, Math.max(0.5, crop.zoom || 1));
-    crop.ox = Math.min(1, Math.max(0, crop.ox ?? 0.5));
-    crop.oy = Math.min(1, Math.max(0, crop.oy ?? 0.5));
-  }
-
-  ctx.save();
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#1b0f2a';
-  ctx.fillRect(0, 0, w, h);
-
-  const rects = panelRects(state.layout, w, h);
-  const count = layout.panels;
   if (state.layout === 'collage') {
-    ctx.fillStyle = '#f4ead9';
+    const bg = ctx.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, '#2b0f3a');
+    bg.addColorStop(1, '#12041f');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+  } else if (state.layout === 'bleed') {
+    ctx.fillStyle = '#1c0a24';
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    ctx.fillStyle = '#12041a';
     ctx.fillRect(0, 0, w, h);
   }
-  for (let i = 0; i < count; i += 1) {
-    const rect = rects[i];
-    const crop = state.crops[i] ?? { zoom: 1, ox: 0.5, oy: 0.5, fit: 'fill' };
-    const photo = state.photos[i] ?? null;
-    if (state.layout === 'collage') {
-      ctx.save();
-      ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
-      ctx.rotate(layout.tilt[i] ?? 0);
-      const border = Math.round(Math.min(w, h) * 0.012);
-      ctx.fillStyle = '#fdf8ef';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-      ctx.shadowBlur = Math.round(Math.min(w, h) * 0.02);
-      ctx.shadowOffsetY = Math.round(Math.min(w, h) * 0.006);
-      ctx.fillRect(-rect.w / 2 - border, -rect.h / 2 - border, rect.w + border * 2, rect.h + border * 2);
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-      drawPanel(ctx, photo, { x: -rect.w / 2, y: -rect.h / 2, w: rect.w, h: rect.h }, crop, compare ? null : grade);
-      ctx.restore();
-    } else {
-      drawPanel(ctx, photo, rect, crop, compare ? null : grade);
-    }
-  }
-
-  if (!compare) {
-    const wash = ctx.createLinearGradient(0, 0, 0, h);
-    wash.addColorStop(0, grade.top);
-    wash.addColorStop(1, grade.bottom);
-    ctx.globalCompositeOperation = grade.blend;
-    ctx.fillStyle = wash;
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalCompositeOperation = 'source-over';
-    const pattern = grainPattern(ctx);
-    if (pattern) {
-      ctx.save();
-      ctx.globalAlpha = grade.grain;
-      ctx.fillStyle = pattern;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
-    }
-    const vig = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.42, w / 2, h / 2, Math.max(w, h) * 0.75);
-    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    vig.addColorStop(1, 'rgba(0, 0, 0, 0.32)');
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  drawTitle(ctx, w, h, layout.titleZone, state.title, state.subtitle, state.badge);
-  ctx.restore();
+  const panels = layoutPanels(state.layout, w, h);
+  panels.forEach((panel, i) => {
+    const slot = state.panels[i] ?? {};
+    const crop = slot.crop ?? defaultCrop(panel);
+    drawPanel(ctx, panel, slot.photo ?? null, crop, grade, compare, w, h);
+  });
+  if (!compare) drawGrainAndVignette(ctx, w, h, grade);
+  drawTitleBlock(ctx, w, h, grade, state.title, state.subtitle, state.badge);
 }
-
-// Full-resolution export on an offscreen canvas, through the same draw
-// path as the preview so what you see is what the file holds.
-export function exportCover(state, width, height) {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  drawCover(canvas, state);
-  return canvas;
-}
-
-export const EXPORT_SIZES = [
-  { label: 'Square 1080 x 1080', w: 1080, h: 1080 },
-  { label: 'Portrait 1080 x 1350', w: 1080, h: 1350 },
-  { label: 'Wide 1920 x 1080', w: 1920, h: 1080 },
-];

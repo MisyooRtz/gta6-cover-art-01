@@ -1,20 +1,17 @@
-// Vice Sunset Cover Studio — a make.fun gta6-cover-art-01 entry.
+// Vice Sunset Cover Studio — the entrypoint (Node 22, standard library only).
 //
-// The app is this directory's app/ folder: plain static files a desktop
-// browser loads offline (app/index.html and its ES modules, no library and
-// no network request). This file is only the hand-in: it copies app/ and
-// screenshots/ from beside itself to /output and writes /output/dossier.json,
-// the summary the judge reads, with the vendored make.fun library.
+// Hands the app in: copies this repository's app/ (the offline static cover
+// maker) and screenshots/ into the output directory and writes
+// /output/dossier.json with the vendored make.fun library, so the judge can
+// read the entry. Nothing here fetches the network or signs anything.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+// Run it outside the grader's container with MAKEFUN_OUTPUT_DIR standing
+// in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-//
-// Node 22, standard library only. The build is deterministic: the same
-// inputs produce byte-identical outputs, so running it twice and diffing
-// the two output trees is a real check, not a hope.
+// Serve the app locally while you work on it with `node serve.ts`, then
+// open http://localhost:8080.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
@@ -22,30 +19,78 @@ import { buildDossier } from './vendor/makefun-app.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) {
-  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+// The scorer's caps for this competition: more than 4 screenshots, or one
+// over 256 KiB, refuses the entry, as do more than 993 files in app/, more
+// than 48 MiB of app files in all, or a path under app/ over 1000 bytes.
+// Check the local numbers before copying so a bad hand-in fails here,
+// loudly, instead of on the server.
+const SCREENSHOT_MAX = 4;
+const SCREENSHOT_MAX_BYTES = 262144;
+const APP_MAX_FILES = 993;
+const APP_MAX_BYTES = 50331648;
+const APP_PATH_MAX_BYTES = 1000;
+
+function fail(message) {
+  console.error(`main.ts: ${message}`);
+  process.exit(1);
 }
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes
-// the bytes; the others refuse an entry the scorer would refuse — more
-// than 4 screenshots or one over 256 KiB; more than 993 files in app/ or
-// 48 MiB of app files in all, or a path under app/ over 1000 bytes. app/
-// counts beside /output's own 1000-entry cap, its screenshots/ and
-// dossier.json. Keeping the limits here, next to the call that enforces
-// them, means a future edit to the app cannot silently drift past them.
-const dossierLimits = {
-  text_max_bytes: 163840,
-  screenshots: { max: 4, max_bytes: 262144 },
-  app_max_files: 993,
-  app_max_bytes: 50331648,
-  app_path_max_bytes: 1000,
-};
+function walk(dir, base = dir) {
+  const found = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...walk(path, base));
+    else if (entry.isFile()) found.push(path);
+  }
+  return found;
+}
 
-writeFileSync(join(out, 'dossier.json'), buildDossier(out, dossierLimits));
+function checkAppTree(appDir) {
+  const files = walk(appDir);
+  if (files.length > APP_MAX_FILES) fail(`app/ has ${files.length} files (cap ${APP_MAX_FILES})`);
+  let bytes = 0;
+  for (const file of files) {
+    const rel = file.slice(appDir.length + 1);
+    if (Buffer.byteLength(rel, 'utf8') > APP_PATH_MAX_BYTES) fail(`app/ path too long: ${rel}`);
+    bytes += statSync(file).size;
+  }
+  if (bytes > APP_MAX_BYTES) fail(`app/ is ${bytes} bytes (cap ${APP_MAX_BYTES})`);
+  if (!existsSync(join(appDir, 'index.html'))) fail('app/index.html is missing');
+}
 
-// A one-line receipt on stdout so a local run shows where the hand-in
-// landed without opening the output tree.
-console.log(`wrote ${out} (app/ + screenshots/ + dossier.json)`);
+function checkScreenshots(shotsDir) {
+  if (!existsSync(shotsDir)) fail('screenshots/ is missing — generate the shots first');
+  const shots = readdirSync(shotsDir)
+    .filter((name) => /\.(png|jpe?g)$/i.test(name))
+    .sort();
+  if (shots.length < 3) fail(`screenshots/ has ${shots.length} images, need at least 3`);
+  if (shots.length > SCREENSHOT_MAX) fail(`screenshots/ has ${shots.length} images (cap ${SCREENSHOT_MAX})`);
+  for (const name of shots) {
+    const size = statSync(join(shotsDir, name)).size;
+    if (size > SCREENSHOT_MAX_BYTES) fail(`screenshots/${name} is ${size} bytes (cap ${SCREENSHOT_MAX_BYTES})`);
+  }
+  return shots;
+}
+
+const appDir = join(here, 'app');
+const shotsDir = join(here, 'screenshots');
+checkAppTree(appDir);
+const shots = checkScreenshots(shotsDir);
+
+mkdirSync(out, { recursive: true });
+cpSync(appDir, join(out, 'app'), { recursive: true });
+mkdirSync(join(out, 'screenshots'), { recursive: true });
+cpSync(shotsDir, join(out, 'screenshots'), { recursive: true });
+
+writeFileSync(
+  join(out, 'dossier.json'),
+  buildDossier(out, {
+    text_max_bytes: 163840,
+    screenshots: { max: SCREENSHOT_MAX, max_bytes: SCREENSHOT_MAX_BYTES },
+    app_max_files: APP_MAX_FILES,
+    app_max_bytes: APP_MAX_BYTES,
+    app_path_max_bytes: APP_PATH_MAX_BYTES,
+  }),
+);
+
+console.log(`handed in app/ and ${shots.length} screenshots (${shots.join(', ')}) to ${out}`);

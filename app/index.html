@@ -3,109 +3,125 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Sunset Cover Studio</title>
+<title>Vice Sunset Cover Studio — GTA 6-style cover art, offline</title>
+<meta name="description" content="Turn your photos into a GTA 6-style multi-panel cover with a Vice City sunset grade. Runs fully offline in your browser — photos never leave your machine.">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<noscript><p style="padding: 24px">Vice Sunset Cover Studio needs JavaScript — the cover is drawn on a canvas in your browser.</p></noscript>
-<main class="app">
-  <section class="controls" aria-label="Cover controls">
-    <header>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">VS</span>
+    <div>
       <h1>Vice Sunset Cover Studio</h1>
-      <p>An offline cover-art maker in the spirit of a Vice City sunset.
-      Load your photos, frame them, pick a grade, and export a cover —
-      no uploads, no account, everything happens in this page.</p>
-    </header>
+      <p class="tagline">Your photos. Four panels. One sunset. No upload, no watermark.</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="export" type="button" class="primary">Export PNG</button>
+  </div>
+</header>
 
-    <fieldset>
-      <legend>Layout</legend>
-      <div id="layout-list" class="choice-list"></div>
-      <label class="visually-hidden" for="layout">Layout</label>
-      <select id="layout">
-        <option value="quad">Quad Grid</option>
-        <option value="hero">Hero + Side Strip</option>
-        <option value="bleed">Full Bleed</option>
-        <option value="collage">Snapshot Collage</option>
-      </select>
-    </fieldset>
+<main class="app">
+  <aside class="controls" aria-label="Cover controls">
+    <section>
+      <h2>Layout <span class="keys">keys 1–4</span></h2>
+      <div id="layout-pick" class="pick-grid" role="group" aria-label="Layout">
+        <button type="button" data-layout="quad">Quad Grid</button>
+        <button type="button" data-layout="hero">Hero + Side Strip</button>
+        <button type="button" data-layout="bleed">Full Bleed</button>
+        <button type="button" data-layout="collage">Snapshot Collage</button>
+      </div>
+    </section>
 
-    <fieldset>
-      <legend>Colour grade</legend>
-      <div id="grade-list" class="choice-list"></div>
-      <label class="visually-hidden" for="grade">Colour grade</label>
-      <select id="grade">
-        <option value="sunset">Vice Sunset</option>
-        <option value="neon">Neon Night</option>
-        <option value="dusk">Palm Dusk</option>
-        <option value="noir">Noir</option>
-      </select>
-      <button id="compare" type="button" class="ghost">Hold to compare (no grade)</button>
-    </fieldset>
+    <section>
+      <h2>Grade <span class="keys">key G</span></h2>
+      <div id="grade-pick" class="pick-grid" role="group" aria-label="Colour grade">
+        <button type="button" data-grade="sunset">Vice Sunset</button>
+        <button type="button" data-grade="neon">Neon Night</button>
+        <button type="button" data-grade="dusk">Palm Dusk</button>
+        <button type="button" data-grade="noir">Noir</button>
+      </div>
+    </section>
 
-    <fieldset>
-      <legend>Words</legend>
+    <section>
+      <h2>Words</h2>
+      <label>Badge ribbon
+        <input id="badge" type="text" maxlength="24" value="Vice City">
+      </label>
       <label>Title
-        <input id="title" type="text" maxlength="32" value="NEON SHORE">
+        <input id="title" type="text" maxlength="30" value="Sunset Heist">
       </label>
       <label>Subtitle
-        <input id="subtitle" type="text" maxlength="48" value="a vice city story">
+        <input id="subtitle" type="text" maxlength="48" value="one last ride down Ocean Drive">
       </label>
-      <label>Badge
-        <input id="badge" type="text" maxlength="16" value="VICE CITY">
-      </label>
-    </fieldset>
+    </section>
 
-    <fieldset>
-      <legend>Photos</legend>
-      <div id="panels" class="panel-list" aria-label="Panels"></div>
-      <label class="file-label">Photo for selected panel
-        <input id="photo" type="file" accept="image/*">
-      </label>
-      <label class="file-label">One photo in all panels
-        <input id="photo-all" type="file" accept="image/*">
-      </label>
-      <div class="row">
-        <button id="sample-boulevard" type="button" class="ghost">Sample: Boulevard</button>
-        <button id="sample-pier" type="button" class="ghost">Sample: Pier</button>
-        <button id="sample-all" type="button" class="ghost">Pier in all panels</button>
+    <section>
+      <h2>Export size</h2>
+      <div id="size-pick" class="pick-grid" role="group" aria-label="Export size">
+        <button type="button" data-size="square">1080 × 1080</button>
+        <button type="button" data-size="portrait">1080 × 1350</button>
+        <button type="button" data-size="wide">1920 × 1080</button>
       </div>
-      <p class="hint">Tip: click a panel on the cover to select it, drag to
-      pan its photo, scroll over it to zoom. You can also drop an image
-      file straight onto the cover.</p>
-    </fieldset>
-
-    <fieldset>
-      <legend>Selected panel crop</legend>
-      <label>Zoom <span id="zoom-label">100%</span>
-        <input id="zoom" type="range" min="0.5" max="4" step="0.05" value="1">
-      </label>
-      <div class="row" role="radiogroup" aria-label="Fit mode">
-        <label class="radio"><input id="fill" type="radio" name="fit" checked> Fill</label>
-        <label class="radio"><input id="fit" type="radio" name="fit"> Fit</label>
-      </div>
-      <div class="row">
-        <button id="shuffle" type="button">Shuffle crops</button>
-        <button id="reset-crops" type="button" class="ghost">Reset crops</button>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Export</legend>
-      <div class="row wrap">
-        <button id="export-square" type="button">PNG 1080 x 1080</button>
-        <button id="export-portrait" type="button">PNG 1080 x 1350</button>
-        <button id="export-wide" type="button">PNG 1920 x 1080</button>
-      </div>
-      <button id="export" type="button" class="primary">Export all three sizes</button>
-      <p id="status" role="status"></p>
-    </fieldset>
-  </section>
+    </section>
+  </aside>
 
   <section class="stage" aria-label="Cover preview">
-    <canvas id="cover" width="720" height="720" aria-label="The cover preview"></canvas>
-    <p class="hint">Preview — exports render the same cover at full resolution.</p>
+    <canvas id="cover" width="1080" height="1080" aria-label="The cover preview"></canvas>
+    <p id="status" role="status">Loading…</p>
   </section>
+
+  <aside class="panel-tools" aria-label="Selected panel">
+    <section>
+      <h2 id="panel-name">Panel 1 — hero</h2>
+      <label>Photo for this panel
+        <input id="photo" type="file" accept="image/*">
+      </label>
+      <div class="sample-row">
+        <button id="sample-boulevard" type="button">Boulevard sample</button>
+        <button id="sample-pier" type="button">Pier sample</button>
+      </div>
+      <div class="sample-row">
+        <button id="sample-all-boulevard" type="button">Boulevard in all panels</button>
+        <button id="sample-all-pier" type="button">Pier in all panels</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Crop</h2>
+      <label>Zoom <span id="zoom-val">100%</span>
+        <input id="zoom" type="range" min="100" max="400" value="100">
+      </label>
+      <div class="button-row">
+        <button id="fill-fit" type="button">Fit whole photo</button>
+        <button id="reset-panel" type="button">Reset crop</button>
+      </div>
+      <div class="button-row">
+        <button id="shuffle" type="button">Shuffle crops</button>
+        <button id="all-panels" type="button">One photo in all panels</button>
+      </div>
+      <button id="compare" type="button">Hold to compare (no grade)</button>
+      <p class="hint">Click a panel to select it. Drag to pan, scroll to zoom, arrow keys nudge. Press C to compare the grade, F to fill/fit, R to reset.</p>
+    </section>
+  </aside>
 </main>
+
+<footer class="foot">
+  <details class="shortcuts">
+    <summary>Keyboard shortcuts</summary>
+    <ul>
+      <li><kbd>1</kbd>–<kbd>4</kbd> switch layout</li>
+      <li><kbd>G</kbd> cycle grade</li>
+      <li><kbd>F</kbd> fill / fit the selected panel</li>
+      <li><kbd>R</kbd> reset the selected panel crop</li>
+      <li><kbd>S</kbd> shuffle all crops</li>
+      <li><kbd>E</kbd> export PNG</li>
+      <li><kbd>C</kbd> hold to compare without the grade</li>
+      <li><kbd>+</kbd> / <kbd>−</kbd> zoom, arrow keys nudge the crop</li>
+    </ul>
+  </details>
+  <p>Offline by design: every photo stays on your machine. Fonts Anton and Pacifico are bundled under the SIL Open Font License. No Rockstar Games logo, artwork or font is used.</p>
+</footer>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
