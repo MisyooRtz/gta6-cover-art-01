@@ -181,13 +181,21 @@ async function loadSample(name) {
   const img = await loadImage(url);
   // Samples fill every empty panel so the cover looks complete at once;
   // panels the user already filled keep their own photo. Each panel gets a
-  // different default crop so the same photo frames differently per panel
-  // (wide panels favour the top of the photo, tall ones the middle).
+  // different default crop so the same photo frames differently per panel.
+  // The crops favour the face: in the pier sample the face sits in the top
+  // third of the photo (roughly y 10-280 of 720), so wide/short panels get
+  // a large positive oy to push the image down and keep eyes, smile and
+  // hat brim in frame instead of cropping to chin/neck. The bottom wide
+  // panel keeps zoom 1 (any less would leave uncovered strips at the
+  // sides) and oy 0.6, which centres the face's eyes in the bright band
+  // above the cover title; the title itself always covers the lower face
+  // there, by design. (A larger oy would suit a 16:9-wide canvas, but the
+  // square shot-1 render clamps it to the top of the photo instead.)
   const defaultCrops = [
-    { zoom: 1.1, ox: 0, oy: 0.25 },
-    { zoom: 1.4, ox: 0, oy: 0.2 },
-    { zoom: 1.25, ox: 0, oy: 0.15 },
-    { zoom: 1, ox: 0, oy: 0.5 },
+    { zoom: 1.1, ox: 0, oy: 0.45 },
+    { zoom: 1.15, ox: 0, oy: 0.72 },
+    { zoom: 1.2, ox: 0, oy: 0.75 },
+    { zoom: 1, ox: 0, oy: 0.6 },
   ];
   for (let i = 0; i < st.panels.length; i++) {
     if (!st.panels[i].img) {
