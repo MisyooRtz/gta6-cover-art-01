@@ -1,54 +1,212 @@
-@font-face { font-family: 'Anton'; src: url('./fonts/Anton-Regular.ttf') format('truetype'); font-display: swap; }
-@font-face { font-family: 'Pacifico'; src: url('./fonts/Pacifico-Regular.ttf') format('truetype'); font-display: swap; }
+/* Vice Sunset Cover Studio — dusk purple panels, sunset pink accents,
+   dark stage so the cover itself is the brightest thing on screen. */
+
+/* Vendored display fonts (SIL OFL 1.1, texts in ./fonts/): Anton for the
+   cover title, Pacifico for the script subtitle. */
+@font-face {
+  font-family: 'Anton';
+  src: url('./fonts/Anton-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Pacifico';
+  src: url('./fonts/Pacifico-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg: #17101f;
+  --panel: #221630;
+  --panel-edge: #3a2a52;
+  --ink: #f5eefb;
+  --muted: #b9a8cc;
+  --accent: #ff2e88;
+  --accent-soft: #ff7ab8;
+  --gold: #ffd76a;
+  --field: #160d22;
+}
 
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; background: #14101c; color: #f4eef7; font: 14px/1.45 system-ui, -apple-system, sans-serif; }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; background: linear-gradient(90deg, #ff7a18, #ff2e63 55%, #7b2ff7); }
-.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.brand-mark { font-size: 22px; }
-.brand strong { font-family: Anton, sans-serif; font-size: 22px; letter-spacing: 1px; text-transform: uppercase; color: #fff; }
-.brand .tag { font-size: 12px; opacity: .9; color: #ffe9f2; }
-.app { display: flex; gap: 24px; padding: 20px; align-items: flex-start; max-width: 1400px; margin: 0 auto; }
-.controls { width: 320px; flex: none; display: flex; flex-direction: column; gap: 18px; background: #1d1626; border: 1px solid #33284a; border-radius: 14px; padding: 18px; }
-.controls section { display: flex; flex-direction: column; gap: 10px; }
-.controls h2 { margin: 0; font-family: Anton, sans-serif; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; color: #ffd166; }
-.hint { margin: 0; font-size: 12px; color: #b9aec9; }
-.fineprint { font-size: 11px; color: #8d829e; margin: 0; }
-label { display: flex; flex-direction: column; gap: 5px; font-weight: 600; font-size: 13px; }
-label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; }
-input[type=text], select { font: inherit; color: #f4eef7; background: #14101c; border: 1px solid #4a3d63; border-radius: 8px; padding: 8px 10px; }
-input[type=text]:focus, select:focus { outline: 2px solid #ff2e63; outline-offset: 1px; }
-input[type=range] { width: 100%; accent-color: #ff2e63; }
-button { font: inherit; font-weight: 700; padding: 9px 12px; border: 1px solid #4a3d63; border-radius: 8px; background: #2a2138; color: #f4eef7; cursor: pointer; }
-button:hover { border-color: #ff2e63; }
-button.primary { background: #ff2e63; border-color: #ff2e63; color: #fff; }
-button.primary:hover { background: #ff4d7a; }
-button.active { background: #ff7a18; border-color: #ff7a18; color: #1d0b00; }
-.row { display: flex; gap: 8px; }
-.row > * { flex: 1; }
-.file-btn { display: inline-block; text-align: center; font-weight: 700; padding: 9px 12px; border-radius: 8px; background: #2a2138; border: 1px solid #4a3d63; cursor: pointer; }
-.sample-row { display: flex; gap: 8px; }
-.sample-btn { flex: 1; padding: 0; overflow: hidden; border: 1px solid #4a3d63; background: #14101c; }
-.sample-btn img { display: block; width: 100%; height: 64px; object-fit: cover; }
-.sample-btn span { display: block; padding: 5px; font-size: 12px; }
-.grade-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.grade-row button { flex: 1 1 45%; padding: 8px 6px; font-size: 12px; }
-.export-row { display: flex; gap: 8px; }
-.export-row > * { flex: 1; }
-.compare { border-style: dashed; }
-#status { margin: 0; font-size: 12px; color: #8fe3a0; min-height: 16px; }
-.stage { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.canvas-wrap { position: relative; max-width: 100%; }
-#cover { display: block; width: min(72vh, 100%); height: auto; border-radius: 6px; box-shadow: 0 18px 50px rgba(0,0,0,.55); cursor: crosshair; background: #2b1038; }
-.panel-tag { position: absolute; top: 10px; left: 10px; background: #ff2e63; color: #fff; font-weight: 700; font-size: 12px; padding: 4px 10px; border-radius: 20px; pointer-events: none; }
-.stage-hint { margin: 0; font-size: 12px; color: #b9aec9; text-align: center; }
-@media (max-width: 900px) { .app { flex-direction: column; } .controls { width: 100%; } .brand .tag { display: none; } }
 
-/* Screenshot scenes: cover mode shows only the canvas, full frame, so the
-   exported cover fills the screenshot with nothing else in view. */
-body.shot-cover .topbar, body.shot-cover .controls, body.shot-cover .stage-hint, body.shot-cover .panel-tag { display: none; }
-body.shot-cover .app { padding: 0; max-width: none; }
-body.shot-cover .stage { width: 100%; }
-body.shot-cover .canvas-wrap { width: 100%; }
-body.shot-cover #cover { width: 100vw; height: 100vh; object-fit: contain; border-radius: 0; box-shadow: none; }
-body.shot-cover { background: #12081f; }
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.app {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+  justify-content: center;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 340px;
+  flex: none;
+}
+
+.controls h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+}
+
+.controls header p { margin: 0; color: var(--muted); }
+
+fieldset {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+legend {
+  padding: 0 6px;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+fieldset label + label { margin-top: 10px; }
+
+input[type="text"], select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+input[type="text"]:focus, select:focus, button:focus-visible, input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.panel-chip {
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 10px;
+  background: var(--field);
+}
+.panel-chip.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.row { display: flex; gap: 8px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+
+.choice-list, .panel-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+button {
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  background: #34234a;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--accent-soft); }
+button.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary { width: 100%; background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: transparent; font-weight: 600; }
+button:active { transform: translateY(1px); }
+
+.file-label {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--panel-edge);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.file-label input { font-weight: 400; }
+
+.radio { flex-direction: row; align-items: center; gap: 6px; font-weight: 600; }
+
+.hint { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+
+#status { margin: 10px 0 0; color: var(--gold); min-height: 1.2em; }
+
+.stage {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.stage canvas {
+  width: min(72vh, 640px);
+  height: auto;
+  aspect-ratio: 1;
+  display: block;
+  background: #1b0f2a;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.stage canvas:active { cursor: grabbing; }
+
+/* Screenshot mode: the cover alone, edge to edge. */
+body.shot-cover { background: #1b0f2a; }
+body.shot-cover .controls, body.shot-cover .stage .hint { display: none; }
+body.shot-cover .app { max-width: none; margin: 0; padding: 0; }
+body.shot-cover .stage { position: static; }
+body.shot-cover canvas {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .app { flex-direction: column; align-items: center; }
+  .controls { width: 100%; max-width: 560px; }
+  .stage { position: static; }
+  .stage canvas { width: min(92vw, 560px); }
+}

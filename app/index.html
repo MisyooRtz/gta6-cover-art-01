@@ -3,87 +3,107 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Sunset Cover Studio — turn any photo into poster cover art</title>
+<title>Vice Sunset Cover Studio</title>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<div class="topbar">
-  <div class="brand"><span class="brand-mark">◐</span><strong>Vice Sunset Cover Studio</strong><span class="tag">offline · your photos never leave this machine</span></div>
-  <div class="top-actions">
-    <button id="btn-all" class="primary" type="button">Export all three sizes</button>
-  </div>
-</div>
+<noscript><p style="padding: 24px">Vice Sunset Cover Studio needs JavaScript — the cover is drawn on a canvas in your browser.</p></noscript>
 <main class="app">
-  <aside class="controls" aria-label="Cover editor">
-    <section>
-      <h2>1 · Photos</h2>
-      <div class="sample-row">
-        <button id="sample-boulevard" type="button" class="sample-btn"><img src="./samples/boulevard.jpg" alt="Boulevard sample photo"><span>Boulevard</span></button>
-        <button id="sample-pier" type="button" class="sample-btn"><img src="./samples/pier.jpg" alt="Pier sample photo"><span>Pier</span></button>
-      </div>
-      <p class="hint">Load a sample, or drop your own photo onto any panel. Click a panel to select it.</p>
-      <div class="row">
-        <label class="file-btn">Upload to selected panel<input id="upload" type="file" accept="image/*" hidden></label>
-        <button id="use-one" type="button">Use one photo in all panels</button>
-      </div>
-      <div class="row">
-        <button id="fit-fill" type="button">Fill / Fit</button>
-        <button id="reset-crop" type="button">Reset crop</button>
-      </div>
-      <div class="row">
-        <button id="shuffle-crops" type="button">Shuffle panel crops</button>
-      </div>
-      <label class="slider">Zoom <span id="zoom-val">100%</span>
-        <input id="zoom" type="range" min="50" max="300" value="100">
+  <section class="controls" aria-label="Cover controls">
+    <header>
+      <h1>Vice Sunset Cover Studio</h1>
+      <p>An offline cover-art maker in the spirit of a Vice City sunset.
+      Load your photos, frame them, pick a grade, and export a cover —
+      no uploads, no account, everything happens in this page.</p>
+    </header>
+
+    <fieldset>
+      <legend>Layout</legend>
+      <div id="layout-list" class="choice-list"></div>
+      <label class="visually-hidden" for="layout">Layout</label>
+      <select id="layout">
+        <option value="quad">Quad Grid</option>
+        <option value="hero">Hero + Side Strip</option>
+        <option value="bleed">Full Bleed</option>
+        <option value="collage">Snapshot Collage</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Colour grade</legend>
+      <div id="grade-list" class="choice-list"></div>
+      <label class="visually-hidden" for="grade">Colour grade</label>
+      <select id="grade">
+        <option value="sunset">Vice Sunset</option>
+        <option value="neon">Neon Night</option>
+        <option value="dusk">Palm Dusk</option>
+        <option value="noir">Noir</option>
+      </select>
+      <button id="compare" type="button" class="ghost">Hold to compare (no grade)</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Words</legend>
+      <label>Title
+        <input id="title" type="text" maxlength="32" value="NEON SHORE">
       </label>
-      <p class="hint">Drag a panel to pan · scroll over it to zoom.</p>
-    </section>
-    <section>
-      <h2>2 · Layout &amp; grade</h2>
-      <label>Layout
-        <select id="layout">
-          <option value="quad">Quad Grid — hero + 3 panels</option>
-          <option value="strip">Hero + Side Strip</option>
-          <option value="full">Full Bleed — one photo</option>
-          <option value="collage">Snapshot Collage</option>
-        </select>
+      <label>Subtitle
+        <input id="subtitle" type="text" maxlength="48" value="a vice city story">
       </label>
-      <div class="grade-row" id="grades" role="group" aria-label="Colour grade"></div>
-      <label class="check"><input id="grain" type="checkbox" checked> Film grain</label>
-      <label class="check"><input id="vignette" type="checkbox" checked> Vignette</label>
-      <label class="check"><input id="grad-title" type="checkbox" checked> Sunset-gradient title</label>
-      <button id="compare" type="button" class="compare">Hold to see before grade</button>
-    </section>
-    <section>
-      <h2>3 · Lettering</h2>
-      <label>Title <input id="title" type="text" maxlength="24" value="NEON SHORE"></label>
-      <label>Subtitle (script) <input id="subtitle" type="text" maxlength="40" value="chasing the last light"></label>
-      <label>Badge / ribbon <input id="badge" type="text" maxlength="32" value="EST. 2026 • SUNSET STRIP"></label>
-    </section>
-    <section>
-      <h2>4 · Export PNG</h2>
-      <label>Size
-        <select id="size">
-          <option value="square">Square — 1080 × 1080</option>
-          <option value="portrait">Portrait — 1080 × 1350</option>
-          <option value="wide">Wide — 1920 × 1080</option>
-        </select>
+      <label>Badge
+        <input id="badge" type="text" maxlength="16" value="VICE CITY">
       </label>
-      <div class="export-row">
-        <button id="export" class="primary" type="button">Export PNG</button>
-        <button id="export-all" type="button">All three</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Photos</legend>
+      <div id="panels" class="panel-list" aria-label="Panels"></div>
+      <label class="file-label">Photo for selected panel
+        <input id="photo" type="file" accept="image/*">
+      </label>
+      <label class="file-label">One photo in all panels
+        <input id="photo-all" type="file" accept="image/*">
+      </label>
+      <div class="row">
+        <button id="sample-boulevard" type="button" class="ghost">Sample: Boulevard</button>
+        <button id="sample-pier" type="button" class="ghost">Sample: Pier</button>
+        <button id="sample-all" type="button" class="ghost">Pier in all panels</button>
       </div>
+      <p class="hint">Tip: click a panel on the cover to select it, drag to
+      pan its photo, scroll over it to zoom. You can also drop an image
+      file straight onto the cover.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Selected panel crop</legend>
+      <label>Zoom <span id="zoom-label">100%</span>
+        <input id="zoom" type="range" min="0.5" max="4" step="0.05" value="1">
+      </label>
+      <div class="row" role="radiogroup" aria-label="Fit mode">
+        <label class="radio"><input id="fill" type="radio" name="fit" checked> Fill</label>
+        <label class="radio"><input id="fit" type="radio" name="fit"> Fit</label>
+      </div>
+      <div class="row">
+        <button id="shuffle" type="button">Shuffle crops</button>
+        <button id="reset-crops" type="button" class="ghost">Reset crops</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Export</legend>
+      <div class="row wrap">
+        <button id="export-square" type="button">PNG 1080 x 1080</button>
+        <button id="export-portrait" type="button">PNG 1080 x 1350</button>
+        <button id="export-wide" type="button">PNG 1920 x 1080</button>
+      </div>
+      <button id="export" type="button" class="primary">Export all three sizes</button>
       <p id="status" role="status"></p>
-      <p class="fineprint">Fonts: Anton &amp; Pacifico (SIL Open Font License, in app/fonts). Sample photos made for make.fun, free to use. Default crops favour the face — wide panels shift the visible window toward the top of the photo. No Rockstar artwork, logos or fonts.</p>
-    </section>
-  </aside>
-  <section class="stage">
-    <div class="canvas-wrap">
-      <!-- Round 2: default crops are face-safe, so the cover's hero and bottom panels favour the face/top of each photo. -->
-      <canvas id="cover" width="1080" height="1080" aria-label="The cover preview"></canvas>
-      <div id="panel-tag" class="panel-tag" hidden>Panel 1</div>
-    </div>
-    <p class="stage-hint">Preview is the real cover, drawn at export resolution. Click a panel to edit its crop.</p>
+    </fieldset>
+  </section>
+
+  <section class="stage" aria-label="Cover preview">
+    <canvas id="cover" width="720" height="720" aria-label="The cover preview"></canvas>
+    <p class="hint">Preview — exports render the same cover at full resolution.</p>
   </section>
 </main>
 <script type="module" src="./src/main.js"></script>
