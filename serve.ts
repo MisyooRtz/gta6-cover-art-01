@@ -1,6 +1,8 @@
 // A tiny static server for app/ (Node 22, standard library only), so the
 // entry can be tried locally without a build step: `node serve.ts` serves
 // app/ on http://localhost:8080. Development convenience only.
+// Dev-only: serves the static app/ directory, no build step; the port comes
+// from the --port flag (`node serve.ts --port 3000`), default 8080.
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';

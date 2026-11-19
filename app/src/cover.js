@@ -86,6 +86,9 @@ export function layoutRects(layout, W, H) {
 
 // Draw one photo into a rect, honouring the panel's crop (pan offsets ox/oy
 // in fractions of the rect, zoom multiplier) and fit/fill mode.
+// Crop contract: oy shifts the visible window toward the top of the photo —
+// positive oy favours the face/top — and wide panels need a larger oy to
+// keep a face in frame (see the defaultCrops table in main.js).
 function drawPanelPhoto(ctx, img, rect, panel) {
   const { x, y, w, h } = rect;
   ctx.save();

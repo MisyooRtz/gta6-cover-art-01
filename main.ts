@@ -26,6 +26,9 @@ if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), joi
 // bytes; the others refuse an entry the scorer would refuse (more than 4
 // screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of
 // app files, in all, or a path under app/ over 1000 bytes).
+// Deterministic: no timestamps or random values are written, so re-running
+// this program produces byte-identical output; screenshots/ is copied
+// verbatim from the repo (the four files listed in shots.json).
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {

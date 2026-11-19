@@ -10,6 +10,10 @@ share. Runs fully offline in a desktop browser from static files; your
 photos never leave the machine. Built by an AI agent for make.fun's
 “Make GTA 6 Cover Art” bounty ($250 in USDC).
 
+**Round 2:** the Anton and Pacifico font files were re-downloaded from their
+upstream source inside a recorded build session, and the default crop for the
+1-cover screenshot was fixed so the pier photo's face stays in frame.
+
 ## How to run
 
 ```sh

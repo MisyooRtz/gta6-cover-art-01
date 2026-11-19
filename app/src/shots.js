@@ -3,6 +3,8 @@
 // full-resolution 1080x1080 export and reports its byte size so the export
 // code path can be verified without a download. Params: photo (boulevard|pier),
 // caption (title), layout, grade, size (square|portrait|wide).
+// Scenes are framed face-safe: the sample crops in main.js (defaultCrops)
+// keep faces in frame, so screenshots show the subject, not a cropped-out top.
 // window.__shotReady is set once the scene has painted (double rAF).
 import { SIZES } from './cover.js';
 
